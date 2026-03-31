@@ -6,61 +6,78 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Dashboard", layout="wide")
 
 # --- 1. DYNAMIC DATA HANDLING ---
-# In a real scenario, replace the 'data' dictionary with:
-# pd.read_csv('your_s3_bucket_link_or_local_path.csv')
+# Your Google Sheets CSV Link (Converted from pubhtml to pub?output=csv)
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQO9Q_7kjiiayiR_SYjvDZIR_BsjGRpVjkckRbWjWXHxGzAh3Lx0hEjpxjkw8IwHQ4rPyNY4RS4Ocbn/pub?output=csv"
+
+@st.cache_data(ttl=600)  # Caches data for 10 minutes to stay fast but stay updated
 def get_team_data():
-    data = {
-        'Team': ['IAM', 'Cloud Ops', 'GRC', 'Network Security', 'IAM', 'GRC'],
-        'Project': ['Role Cleanup', 'S3 Logging', 'Audit Prep', 'Firewall Refresh', 'SSO Migration', 'Policy Update'],
-        'Status': ['In Progress', 'Completed', 'Pending', 'In Progress', 'Completed', 'In Progress'],
-        'Progress_Value': [65, 100, 10, 40, 100, 55],
-        'Month': ['March', 'March', 'March', 'March', 'March', 'March']
-    }
-    return pd.DataFrame(data)
+    try:
+        # Pulls directly from the live Google Sheet
+        df = pd.read_csv(SHEET_URL)
+        return df
+    except Exception as e:
+        st.error(f"Error connecting to Google Sheets: {e}")
+        # Fallback empty dataframe with correct columns if connection fails
+        return pd.DataFrame(columns=['Month', 'Team', 'Project', 'Status', 'Progress_Value'])
 
 df = get_team_data()
 
 # --- 2. EXECUTIVE SIDEBAR ---
 st.sidebar.title("Dashboard Controls")
-all_teams = df['Team'].unique()
-selected_teams = st.sidebar.multiselect("Filter by Team", options=all_teams, default=all_teams)
-selected_month = st.sidebar.selectbox("Reporting Month", options=df['Month'].unique())
 
-# Filter data dynamically
-filtered_df = df[(df['Team'].isin(selected_teams)) & (df['Month'] == selected_month)]
+# Added a refresh button so executives can force an update
+if st.sidebar.button('🔄 Refresh Data'):
+    st.cache_data.clear()
+    st.rerun()
 
-# --- 3. DASHBOARD UI ---
-st.title("📊 Monthly Executive Updates")
-st.markdown(f"**Viewing updates for:** {', '.join(selected_teams)} | **Period:** {selected_month}")
+if not df.empty:
+    all_teams = df['Team'].unique()
+    selected_teams = st.sidebar.multiselect("Filter by Team", options=all_teams, default=all_teams)
+    
+    all_months = df['Month'].unique()
+    selected_month = st.sidebar.selectbox("Reporting Month", options=all_months)
 
-# Top Row Metrics
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Active Teams", len(selected_teams))
-col2.metric("✅ Completed", len(filtered_df[filtered_df['Status'] == 'Completed']))
-col3.metric("⏳ In Progress", len(filtered_df[filtered_df['Status'] == 'In Progress']))
-col4.metric("❌ Pending", len(filtered_df[filtered_df['Status'] == 'Pending']))
+    # Filter data dynamically
+    filtered_df = df[(df['Team'].isin(selected_teams)) & (df['Month'] == selected_month)]
 
-st.divider()
+    # --- 3. DASHBOARD UI ---
+    st.title("📊 Monthly Executive Updates")
+    st.markdown(f"**Viewing updates for:** {', '.join(selected_teams)} | **Period:** {selected_month}")
 
-# Visual Progress Chart
-st.subheader("Project Status Visualizer")
-fig = px.bar(
-    filtered_df, 
-    x='Project', 
-    y='Progress_Value', 
-    color='Status',
-    text='Progress_Value',
-    color_discrete_map={'Completed': '#28a745', 'In Progress': '#ffc107', 'Pending': '#dc3545'}
-)
-st.plotly_chart(fig, use_container_width=True)
+    # Top Row Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Active Teams", len(selected_teams))
+    col2.metric("✅ Completed", len(filtered_df[filtered_df['Status'] == 'Completed']))
+    col3.metric("⏳ In Progress", len(filtered_df[filtered_df['Status'] == 'In Progress']))
+    col4.metric("❌ Pending", len(filtered_df[filtered_df['Status'] == 'Pending']))
 
-# Detailed Data Table
-st.subheader("Activity List & Project Details")
-st.table(filtered_df[['Team', 'Project', 'Status', 'Progress_Value']])
+    st.divider()
 
-# --- 4. SUGGESTION FOR TRACKING ---
+    # Visual Progress Chart
+    st.subheader("Project Status Visualizer")
+    if not filtered_df.empty:
+        fig = px.bar(
+            filtered_df, 
+            x='Project', 
+            y='Progress_Value', 
+            color='Status',
+            text='Progress_Value',
+            # Ensures colors stay consistent with the status
+            color_discrete_map={'Completed': '#28a745', 'In Progress': '#ffc107', 'Pending': '#dc3545'}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Detailed Data Table
+        st.subheader("Activity List & Project Details")
+        st.table(filtered_df[['Team', 'Project', 'Status', 'Progress_Value']])
+    else:
+        st.warning("No data found for the selected filters.")
+
+else:
+    st.warning("The data source is empty or could not be loaded. Check your Google Sheet headers.")
+
+# --- 4. TRACKING INFO ---
 st.info("""
-**Pro-Tip for Progress Tracking:** To keep this dynamic, host a CSV file on a shared drive or AWS S3. 
-Update the `get_team_data()` function to pull from that URL so the dashboard 
-updates automatically whenever a team lead changes the source file.
+**Note:** Changes made in the Google Sheet may take a few minutes to appear due to Google's 
+publishing delay and the app's 10-minute cache. Click **'Refresh Data'** in the sidebar to sync manually.
 """)
