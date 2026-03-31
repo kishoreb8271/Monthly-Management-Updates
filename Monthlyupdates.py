@@ -2,68 +2,65 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. Setup Page Configuration
-st.set_page_config(page_title="Executive Team Dashboard", layout="wide")
+# Basic Page Setup
+st.set_page_config(page_title="Executive Dashboard", layout="wide")
 
-# 2. Mock Data Generator (In a real scenario, use: pd.read_csv('updates.csv'))
-def load_data():
+# --- 1. DYNAMIC DATA HANDLING ---
+# In a real scenario, replace the 'data' dictionary with:
+# pd.read_csv('your_s3_bucket_link_or_local_path.csv')
+def get_team_data():
     data = {
-        'Team': ['IAM', 'Cloud Security', 'GRC', 'IAM', 'GRC', 'Cloud Security'],
-        'Project': ['SSO Integration', 'S3 Bucket Encryption', 'NIST Audit', 'PAM Setup', 'Policy Review', 'Lambda Security'],
-        'Status': ['Completed', 'In Progress', 'Pending', 'In Progress', 'Completed', 'In Progress'],
-        'Update_Month': ['March', 'March', 'March', 'March', 'March', 'March'],
-        'Progress_Percent': [100, 45, 10, 60, 100, 30]
+        'Team': ['IAM', 'Cloud Ops', 'GRC', 'Network Security', 'IAM', 'GRC'],
+        'Project': ['Role Cleanup', 'S3 Logging', 'Audit Prep', 'Firewall Refresh', 'SSO Migration', 'Policy Update'],
+        'Status': ['In Progress', 'Completed', 'Pending', 'In Progress', 'Completed', 'In Progress'],
+        'Progress_Value': [65, 100, 10, 40, 100, 55],
+        'Month': ['March', 'March', 'March', 'March', 'March', 'March']
     }
     return pd.DataFrame(data)
 
-df = load_data()
+df = get_team_data()
 
-# --- SIDEBAR FILTERS ---
-st.sidebar.header("Dashboard Filters")
-selected_team = st.sidebar.multiselect("Select Teams", options=df['Team'].unique(), default=df['Team'].unique())
-selected_month = st.sidebar.selectbox("Select Month", options=df['Update_Month'].unique())
+# --- 2. EXECUTIVE SIDEBAR ---
+st.sidebar.title("Dashboard Controls")
+all_teams = df['Team'].unique()
+selected_teams = st.sidebar.multiselect("Filter by Team", options=all_teams, default=all_teams)
+selected_month = st.sidebar.selectbox("Reporting Month", options=df['Month'].unique())
 
-# Filter dataframe based on selection
-filtered_df = df[(df['Team'].isin(selected_team)) & (df['Update_Month'] == selected_month)]
+# Filter data dynamically
+filtered_df = df[(df['Team'].isin(selected_teams)) & (df['Month'] == selected_month)]
 
-# --- MAIN DASHBOARD ---
-st.title("🚀 Executive Monthly Updates")
-st.markdown(f"**Reporting Period:** {selected_month} 2026")
+# --- 3. DASHBOARD UI ---
+st.title("📊 Monthly Executive Updates")
+st.markdown(f"**Viewing updates for:** {', '.join(selected_teams)} | **Period:** {selected_month}")
 
-# 3. Key Metrics (Number of Teams & Status)
+# Top Row Metrics
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Teams", len(selected_team))
-col2.metric("Completed", len(filtered_df[filtered_df['Status'] == 'Completed']))
-col3.metric("In Progress", len(filtered_df[filtered_df['Status'] == 'In Progress']))
-col4.metric("Pending", len(filtered_df[filtered_df['Status'] == 'Pending']))
+col1.metric("Active Teams", len(selected_teams))
+col2.metric("✅ Completed", len(filtered_df[filtered_df['Status'] == 'Completed']))
+col3.metric("⏳ In Progress", len(filtered_df[filtered_df['Status'] == 'In Progress']))
+col4.metric("❌ Pending", len(filtered_df[filtered_df['Status'] == 'Pending']))
 
 st.divider()
 
-# 4. Visual Progress Chart
-st.subheader("Team Activity Overview")
+# Visual Progress Chart
+st.subheader("Project Status Visualizer")
 fig = px.bar(
     filtered_df, 
     x='Project', 
-    y='Progress_Percent', 
+    y='Progress_Value', 
     color='Status',
-    text='Progress_Percent',
-    barmode='group',
-    color_discrete_map={'Completed': '#2ca02c', 'In Progress': '#ff7f0e', 'Pending': '#d62728'}
+    text='Progress_Value',
+    color_discrete_map={'Completed': '#28a745', 'In Progress': '#ffc107', 'Pending': '#dc3545'}
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# 5. Activity List / Projects Table
-st.subheader("Detailed Activity List")
-st.dataframe(
-    filtered_df[['Team', 'Project', 'Status', 'Progress_Percent']], 
-    use_container_width=True,
-    hide_index=True
-)
+# Detailed Data Table
+st.subheader("Activity List & Project Details")
+st.table(filtered_df[['Team', 'Project', 'Status', 'Progress_Value']])
 
-# 6. Progress Tracking Suggestion
-with st.expander("💡 How to track progress updates?"):
-    st.write("""
-    1. **Centralized Data:** Use an AWS S3 bucket to host a `status.json` or `data.csv`.
-    2. **Automation:** Set up an n8n workflow or a Python script to pull updates from team Slack channels or Jira.
-    3. **Standardized Input:** Ensure every team uses the same status labels: `Completed`, `In Progress`, and `Pending`.
-    """)
+# --- 4. SUGGESTION FOR TRACKING ---
+st.info("""
+**Pro-Tip for Progress Tracking:** To keep this dynamic, host a CSV file on a shared drive or AWS S3. 
+Update the `get_team_data()` function to pull from that URL so the dashboard 
+updates automatically whenever a team lead changes the source file.
+""")
